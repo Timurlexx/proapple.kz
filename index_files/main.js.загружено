@@ -1,0 +1,1058 @@
+// ---------------------------------------------------------------------
+// Global JavaScript
+// Authors: Andrew Ross & a little help from my friends
+// ---------------------------------------------------------------------
+
+var andrewrossco = andrewrossco || {};
+
+(function($, APP) {
+
+$(function() {
+  APP.Global.init();
+  APP.Viewport.init();
+  APP.Modal.init();
+  APP.Tabs.init();
+  APP.Accordion.init();
+  APP.Countdown.init();
+  APP.Timezones.init();
+  APP.Favorites.init();
+  APP.Filters.init();
+  APP.GoogleAnalytics.init();
+});
+
+// ---------------------------------------------------------------------
+// Browser and Feature Detection
+// ---------------------------------------------------------------------
+
+APP.Global = {
+  init: function() {
+
+    document.body.classList.add('page-ready');
+    document.body.classList.remove('no-js');
+
+    if ( ! ('ontouchstart' in window) ) {
+      document.documentElement.classList.add('no-touch');
+    }
+
+    if ( 'ontouchstart' in window ) {
+      document.documentElement.classList.add('is-touch');
+    }
+
+    if (document.documentMode || /Edge/.test(navigator.userAgent)) {
+      if(navigator.appVersion.indexOf('Trident') === -1) {
+        document.documentElement.classList.add('isEDGE');
+      } else {
+        $('html').addClass('isIE isIE11');
+      }
+    }
+
+    var isSafari = /constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || (typeof safari !== 'undefined' && safari.pushNotification));
+
+    if(isSafari){
+      document.body.classList.add('browser-safari');
+    }
+
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('darkmode');
+      document.getElementById('favicon').setAttribute('href', '/assets/img/favicons/favicon-light.png');
+    }
+
+    if(window.location.hostname == 'localhost' | window.location.hostname == '127.0.0.1'){
+      document.body.classList.add('localhost');
+    }
+
+    $('.js-menu-trigger').click(function(e){
+      e.preventDefault();
+      if( $('body').hasClass('menu-is-active') ) {
+        $('body').removeClass('menu-is-active');
+      } else {
+        $('body').addClass('menu-is-active');
+      }
+    });
+
+    $(window).keyup(function (e) {
+      var code = (e.keyCode ? e.keyCode : e.which);
+      if (code == 9){
+        if ($(window).width() < 768) {
+          if ( $('.navigation__inner a:focus, .navigation__inner input:focus').length) {
+            $('body').addClass('menu-is-active');
+          } else {
+            $('body').removeClass('menu-is-active');
+          }
+        }
+      }
+    });
+
+
+    $('.fancy-click').click(function(){
+      let el = $(this);
+      el.addClass('active');
+
+      setTimeout(function(){
+        el.removeClass('active');
+      }, 600);
+    });
+
+    $('.js-decline-cookies').click(function(e){
+      e.preventDefault();
+      localStorage.setItem('universeAllowCkis', 'false');
+      $('#cookies-notice').removeClass('is-active');
+      setTimeout(function(){
+        $('#cookies-notice').remove();
+      }, 2000);
+    });
+    
+  }
+}
+
+
+// ---------------------------------------------------------------------
+// Detect when an element is in the viewport
+// ---------------------------------------------------------------------
+
+APP.Viewport = {
+
+  init: function() {
+    let items = document.querySelectorAll('*[data-animate-in], *[data-detect-viewport]'),
+    pageOffset = window.pageYOffset;
+
+    function isScrolledIntoView(el) {
+      var rect = el.getBoundingClientRect(),
+      elemTop = rect.top,
+      elemBottom = rect.top + el.offsetHeight,
+      bottomWin = pageOffset + window.innerHeight;
+      return (elemTop < bottomWin && elemBottom > 0);
+    }
+
+    function detect() {
+      for(var i = 0; i < items.length; i++) {
+        if ( isScrolledIntoView(items[i]) ) {
+          if( !items[i].classList.contains('in-view') ) {
+            items[i].classList.add('in-view');
+          }
+        }
+      }
+    }
+
+    function throttle(fn, wait) {
+      var time = Date.now();
+      return function() {
+        if ((time + wait - Date.now()) < 0) {
+          fn();
+          time = Date.now();
+        }
+      }
+    }
+
+    window.addEventListener('scroll', throttle(detect, 150));
+
+    window.addEventListener('resize', detect);
+
+    for(var i = 0; i < items.length; i++) {
+      var d = 0,
+      el = items[i];
+
+      if( items[i].getAttribute('data-animate-in-delay') ) {
+        d = items[i].getAttribute('data-animate-in-delay') / 1000 + 's';
+      } else {
+        d = 0;
+      }
+      el.style.transitionDelay = d;
+    }
+
+    $(document).ready(detect);
+  }
+
+};
+
+
+// ---------------------------------------------------------------------
+// GA
+// ---------------------------------------------------------------------
+
+APP.GoogleAnalytics = {
+
+  init: function () {
+    this.addEventListeners();
+
+    document.addEventListener('click',function(e){
+      const el = e.target;
+      if(el && el.hasAttribute('data-ga-click')){
+        el.addEventListener('click', el.sendGoogleAnalyticsEvent);
+        const gaParams = el.getAttribute('data-ga-click').split(',');
+        ga('send', 'event', gaParams[0], gaParams[1], gaParams[2]);
+      }
+    });
+  },
+
+  addEventListeners: function() {
+    const clickTargets = document.querySelectorAll('[data-ga-click]')
+    for (clickTarget of clickTargets) {
+      clickTarget.addEventListener('click', this.sendGoogleAnalyticsEvent)
+    }
+  },
+
+  sendGoogleAnalyticsEvent: function (event) {
+    const gaParams = event.currentTarget.getAttribute('data-ga-click').split(',')
+    ga('send', 'event', gaParams[0], gaParams[1], gaParams[2])
+  }
+};
+
+
+// ---------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------
+
+APP.Modal = {
+
+  init: function() {
+
+    // Click function
+    const modalOpen = $('*[data-modal-target]');
+
+    modalOpen.on('click touchstart:not(touchmove)', function(event) {
+      event.preventDefault();
+      let trigger = $(this).attr('data-modal-target');
+      let target = $("#" + trigger);
+
+      if( target.hasClass('is-active') ) {
+        target.removeClass('is-active');
+        $('body').removeClass('modal-is-active');
+        target.find('.modal__content').removeClass('d-none');
+        target.find('.share-modal-content').addClass('d-none');
+      } else {
+        target.addClass('is-active');
+        $('body').addClass('modal-is-active');
+      }
+    });
+
+    // Individual Modals
+    $('.js-calendar').click(function(e){
+      e.preventDefault();
+      $('body').addClass('modal-is-active');
+      document.getElementById('add-to-calendar').classList.add('is-active');
+      $('body').removeClass('menu-is-active');
+    });
+
+    $('.js-calendar-close').click(function(e){
+      e.preventDefault();
+      $('body').removeClass('modal-is-active');
+      document.getElementById('add-to-calendar').classList.remove('is-active');
+      window.location.hash = '';
+      $(this).parents('.modal-wrap').find('.modal__content').removeClass('d-none');
+      $(this).parents('.modal-wrap').find('.share-modal-content').addClass('d-none');
+    });
+
+    $('.js-subscribe').click(function(e){
+      e.preventDefault();
+      $('body').addClass('modal-is-active');
+      document.getElementById('subscribe').classList.add('is-active');
+      $('#mce-EMAIL').focus();
+      $('body').removeClass('menu-is-active');
+    });
+
+    $('.js-subscribe-close').click(function(e){
+      e.preventDefault();
+      $('body').removeClass('modal-is-active');
+      document.getElementById('subscribe').classList.remove('is-active');
+      window.location.hash = '';
+    });
+
+    $(document).ready(function(){
+      if( window.location.hash.replace('#', '') == 'add-to-calendar' ) {
+        $('body').addClass('modal-is-active');
+        document.getElementById('add-to-calendar').classList.add('is-active');
+      }
+      if( window.location.hash.replace('#', '') == 'subscribe' ) {
+        $('body').addClass('modal-is-active');
+        document.getElementById('subscribe').classList.add('is-active');
+      }
+    });
+
+    const leavingLinks = $('.js-leave-notice');
+    const leavingModal = $('#leaving-notice');
+
+    leavingLinks.click(function(e){
+      e.preventDefault();
+      let link = $(this).attr('href');
+      leavingModal.addClass('is-active');
+      $('body').addClass('modal-is-active');
+      leavingModal.find('.js-outgoing').attr('href', link);
+    });
+
+    $('.js-leaving-close').click(function(e){
+      e.preventDefault();
+      $('body').removeClass('modal-is-active');
+      leavingModal.removeClass('is-active');
+    });
+
+    const showShare = $('.js-show-share');
+    showShare.click(function(){
+      var el = $(this);
+      setTimeout(function(){
+        el.parents('.modal-wrap').find('.modal__content').addClass('d-none');
+        el.parents('.modal-wrap').find('.share-modal-content').removeClass('d-none');
+      }, 2000);
+    });
+  }
+};
+
+
+// ---------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------
+
+APP.Tabs = {
+
+  init: function() {
+
+    let tabs = $('.tabs__tab'),
+    tabsBody = $('.tabs__content');
+
+    function thisHeight(){
+        return $(this).height();
+    }
+    // $(".tabs__body").height(function() {
+    //     let tallest = Math.max.apply(Math, $(this).find(".tabs__content").map(thisHeight));
+    //     let minHeight = tallest + 50;
+    //     $(this).css('min-height', minHeight);
+    // });
+
+    tabs.click(function() {
+      let el = $(this);
+      let target = el.attr('data-tab');
+      let newActive = $('.tabs__content[data-tab-bd=' + target + ']');
+      let curActive = $('.tabs__content.is-active');
+      let newActiveHeight = newActive[0].scrollHeight;
+      tabs.removeClass('is-active');
+      el.addClass('is-active');
+      curActive.removeClass('is-active');
+      newActive.addClass('is-active');
+    });
+
+
+    $('[data-scroll-to="enterprise"]').click(function(){
+      $('html, body').animate({
+        scrollTop: $('#built-for-you').offset().top - 80
+      }, 1200);
+      $('[data-tab="for-enterprise"]').click();
+    });
+
+    $('[data-scroll-to="developer"]').click(function(){
+      $('html, body').animate({
+        scrollTop: $('#built-for-you').offset().top - 80
+      }, 1200);
+      $('[data-tab="for-developer"]').click();
+    });
+
+    $('[data-scroll-to="university"]').click(function(){
+      $('html, body').animate({
+        scrollTop: $('#built-for-you').offset().top - 80
+      }, 1200);
+      $('[data-tab="for-university"]').click();
+    });
+
+
+    $(document).ready(function(){
+      var hash = window.location.hash.replace('#', '');
+      if( hash.length ) {
+        tabs.removeClass('is-active');
+        tabsBody.removeClass('is-active');
+        $('.tabs__tab[data-tab=' + hash + ']').addClass('is-active');
+        $('.tabs__content[data-tab-bd=' + hash + ']').addClass('is-active');
+      }
+    });
+
+
+
+    const schedTabs = $('.schedule-tab');
+    const schedTabsBody = $('.schedule-body');
+    schedTabs.click(function(){
+      let el = $(this);
+      let target = el.attr('data-tab');
+      schedTabs.removeClass('is-active');
+      schedTabsBody.removeClass('is-active');
+
+      el.addClass('is-active');
+      $('.schedule-body[data-tab-bd="' + target +'"]').addClass('is-active');
+
+    });
+
+
+
+  }
+
+};
+
+
+// ---------------------------------------------------------------------
+// Accordion
+// ---------------------------------------------------------------------
+
+APP.Accordion = {
+
+  init: function() {
+    if( $('.accordion').length ) {
+      this.bind();
+    } else {
+      return;
+    }
+  },
+
+  bind: function() {
+    const acc = $('.accordion__hd');
+    const abd = $('.accordion__bd');
+    acc.click(function(){
+      $(this).parents('.accordion').toggleClass('is-open');
+      $(this).next('.accordion__bd').slideToggle(400);
+    });
+    $('.accordions .accordion:first-child .accordion__hd').each(function(){
+      $(this).parents('.accordion').addClass('is-open');
+      $(this).next('.accordion__bd').show();
+    });
+  }
+};
+
+
+// ---------------------------------------------------------------------
+// Countdown Timer
+// ---------------------------------------------------------------------
+
+APP.Countdown = {
+
+  init: function() {
+    if( $('.countdown').length ) {
+      this.bind();
+    } else {
+      return;
+    }
+  },
+
+  bind: function() {
+
+    var end = new Date('12/08/2020 09:00 AM PST');
+    var _second = 1000;
+    var _minute = _second * 60;
+    var _hour = _minute * 60;
+    var _day = _hour * 24;
+    var timer;
+    var countdownWrap = document.querySelectorAll('.countdown-wrap');
+    var countdowns = document.querySelectorAll('.countdown');
+
+    function getESTOffset() {
+      return new Date().getTimezoneOffset() - (end.getTimezoneOffset())
+    }
+
+    setTimeout(function(){
+      $('.site-header .countdown-wrap').addClass('is-active');
+    }, 1000);
+
+    function showRemaining() {
+      var now = new Date();
+      var distance = end - now - (getESTOffset()+1) * _hour;
+      if (distance < 0) {
+        clearInterval(timer);
+        //document.getElementById("countdown").innerHTML = "";
+        for(var i = 0; i < countdowns.length; i++) {
+          countdowns[i].innerHTML = "";
+        }
+        for(var i = 0; i < countdownWrap.length; i++) {
+          countdownWrap[i].classList.add('d-none');
+        }
+        return;
+      }
+      var days = Math.floor(distance / _day);
+      var hours = Math.floor((distance % _day) / _hour);
+      var minutes = Math.floor((distance % _hour) / _minute);
+      var seconds = Math.floor((distance % _minute) / _second);
+
+      for(var i = 0; i < countdowns.length; i++) {
+        countdowns[i].innerHTML = days + "<span>d</span> :: " + hours + "<span>h</span> :: " + minutes + "<span>m</span> :: " + seconds + "<span>s</span> ";
+      }
+    }
+
+    timer = setInterval(showRemaining, 1000);
+
+  }
+};
+
+
+
+// ---------------------------------------------------------------------
+// Timezones
+// ---------------------------------------------------------------------
+
+APP.Timezones = {
+
+  init: function() {
+
+    const eventStart = new Date('December 8, 2020 09:00:00 GMT-0800');
+    const sessions = $('.session');
+
+    let times = $('.js-time');
+    let timeWithZone = $('.js-time-timezone');
+    let dateTime = $('.js-time-dateTime');
+
+    function get_tz(dt) {
+      return /\((.*)\)/.exec(new Date().toString())[1];
+    }
+
+    let dt = new Date();
+    let curTimeZone = get_tz(dt);
+
+    $('.js-current-timezone').text(curTimeZone);
+
+    let twelveHourTime = false;
+    if( Intl.DateTimeFormat().resolvedOptions().timeZone.includes("America") ) {
+      twelveHourTime = true;
+    }
+
+    // Set all session times
+    function setSessionTimes() {
+      times.each(function(){
+          let el = $(this),
+              time = el.attr('data-time');
+          let parsedTime = parseTime(time, false, false);
+          el.html(parsedTime);
+      });
+      timeWithZone.each(function(){
+          let el = $(this);
+          let time = el.attr('data-time');
+          let parsedTime = parseTime(time, true, false);
+          el.html(parsedTime);
+      });
+
+      dateTime.each(function(){
+          let el = $(this);
+          let time = el.attr('data-time');
+          let parsedTime = parseTime(time, true, true);
+          el.html(parsedTime);
+      });
+    }
+
+
+    // Parse time
+    // TODO: Pass in options for differnt displays? or parse data into spans with classes for css target
+    function parseTime(date, showTimezone, withDate) {
+      let seshTime = new Date(date);
+      //https://www.jsman.net/manual/Standard-Global-Objects/Date/toLocaleTimeString
+      // weekday: "long",
+      // hour12: false,
+      let setFormat;
+      if(showTimezone){
+        setFormat = seshTime.toLocaleTimeString([], {hour12: twelveHourTime, hour: "numeric", minute: "numeric", timeZoneName: "short"});
+      }
+
+      if(withDate){
+        setFormat = seshTime.toLocaleTimeString([], {month: "long", day: "numeric", hour12: twelveHourTime, hour: "numeric", minute: "numeric", timeZoneName: "short"});
+      }
+
+      if (!withDate && !showTimezone) {
+        setFormat = seshTime.toLocaleTimeString([], {hour12: twelveHourTime, hour: "numeric", minute: "numeric"});
+      }
+
+      return setFormat;
+    }
+
+
+    let currentSched = localStorage.getItem('universeScheduleDisplay');
+    const eastTime = $('.js-eastern-time');
+    const westTime = $('.js-western-time');
+    const currentSchedule = $('.js-current-schedule');
+
+    if( !currentSched ) {
+      localStorage.setItem('universeScheduleDisplay', 'west');
+    }
+
+    if (currentSched == 'east') {
+      easternSched();
+    }
+
+    eastTime.click(function(){
+      easternSched();
+    });
+
+    westTime.click(function(){
+      westernSched();
+    });
+
+    function easternSched(){
+      $('body').removeClass('western-schedule');
+      $('body').addClass('eastern-schedule');
+      eastTime.addClass('is-active');
+      westTime.removeClass('is-active');
+      localStorage.setItem('universeScheduleDisplay', 'east');
+      currentSchedule.text('Asia / Pacific');
+    }
+
+    function westernSched(){
+      $('body').removeClass('eastern-schedule');
+      $('body').addClass('western-schedule');
+      westTime.addClass('is-active');
+      eastTime.removeClass('is-active');
+      localStorage.setItem('universeScheduleDisplay', 'west');
+      currentSchedule.text('Americas / Europe');
+    }
+
+    function getTimezoneOffset() {
+      function z(n){return (n<10? '0' : '') + n}
+      var offset = new Date().getTimezoneOffset();
+      var sign = offset < 0? '+' : '-';
+      offset = Math.abs(offset);
+      return sign + z(offset/60 | 0) + z(offset%60);
+    }
+
+    let usersZone = getTimezoneOffset();
+    if( usersZone > 300 ) {
+      if( !currentSched ) {
+        $('.site-header .js-current-schedule').click();
+        $('#timezone-modal .js-eastern-time').click();
+      }
+    }
+
+    $(document).ready(function(){
+        //nowPlaying();
+        setSessionTimes();
+    });
+  }
+};
+
+
+// ---------------------------------------------------------------------
+// Favorites
+// ---------------------------------------------------------------------
+
+APP.Favorites = {
+
+  init: function() {
+
+    const favorites = $('.js-favorite');
+    const session = $('.js-session');
+
+    let newFavs = [];
+    let currentFavs = localStorage.getItem('universeFavs');
+    if(!currentFavs) {
+      currentFavs = [];
+    } else {
+      currentFavs = currentFavs.split(",");
+    }
+
+    favorites.click(function(){
+      let el = $(this);
+      let session = el.parents('.js-session');
+      let sessionId = session.attr('id');
+      sessionId = String(sessionId);
+
+      // Check if already a favorite
+      if( session.hasClass('is-favorite') ) {
+        // Remove favorite class
+        session.removeClass('is-favorite');
+        // Remove from array
+        removeItemOnce(currentFavs, sessionId);
+        // Update local storage
+        localStorage.setItem('universeFavs', currentFavs);
+        //$('#localStorage').html(currentFavs);
+        //console.log(currentFavs);
+      } else {
+        // Add favorite class
+        session.addClass('is-favorite');
+        //session.removeClass('is-recommended');
+        // Check if item is already stored
+        if( !newFavs.includes(sessionId) && !currentFavs.includes(sessionId) ) {
+          // Add to new favorites array
+          newFavs.push(sessionId);
+          // Update local storage
+          if( currentFavs ) {
+            updatedFavs = currentFavs.concat(newFavs);
+            localStorage.setItem('universeFavs', updatedFavs);
+          } else {
+            localStorage.setItem('universeFavs', newFavs);
+          }
+
+          // Update recommended
+          //$('#localStorage').html(updatedFavs);
+          //getRecommendations();
+        }
+      }
+    });
+
+    function getFavs()  {
+      const favs = localStorage.getItem('universeFavs');
+      if( favs ) {
+        favsArray = favs.split(",");
+        session.each(function(){
+          var el = $(this),
+          elId = el.attr('id');
+          if( favsArray.includes(elId) ) {
+            el.addClass('is-favorite');
+          }
+        });
+        //console.log(favsArray);
+        $('.site-header .icon-link--heart').addClass('is-active').removeClass('is-disabled');
+        //$('#localStorage').html(favsArray);
+      } else {
+        $('.site-header .icon-link--heart').addClass('is-disabled');
+        // console.log(localStorage.getItem('universeFavs'));
+      }
+    }
+
+    function getRecommendations()  {
+      let recommendations = [];
+      let sessions = $('.session.is-favorite');
+
+      sessions.each(function(){
+        var tags = $(this).attr('data-tags');
+        tags = tags.split(", ");
+        //console.log(tags);
+        recommendations = recommendations.concat(tags);
+      });
+
+      //console.log(recommendations);
+
+      var occurance = 1;
+      var m = 0;
+      var item;
+      for (var i=0; i<recommendations.length; i++) {
+        for (var j=i; j<recommendations.length; j++) {
+          if ( recommendations[i] == recommendations[j] )
+          m++;
+          if ( occurance < m) {
+            occurance = m;
+            item = recommendations[i];
+          }
+        }
+        m=0;
+      }
+      // console.log(item + " = " + occurance +" times") ;
+      // console.log('Recommendations = ', recommendations);
+
+      let recommend = item;
+      // $(".session:not(.is-favorite)").each(function(){
+      //     var el = $(this);
+      //     var tags = el.attr('data-tags');
+      //     tags = tags.split(", ");
+      //
+      //     if( tags.includes(recommend) ) {
+      //         el.addClass('is-recommended');
+      //     }
+      // });
+    }
+
+    function removeItemOnce(arr, value) {
+      var index = arr.indexOf(value);
+      if (index > -1) {
+        arr.splice(index, 1);
+      }
+      return arr;
+    }
+
+    const favsToggle = $('.js-favorites-toggle');
+    const sessionsWrap = $('.sessions');
+    const timeslots = $('.timeslot');
+    const resultsCount = $('#filter-results-count');
+
+    favsToggle.click(function(){
+      let count = 0;
+
+      if( sessionsWrap.hasClass('favorites-only') ) {
+        favsToggle.removeClass('is-active');
+        sessionsWrap.addClass('is-thinking');
+
+        setTimeout(function(){
+            $('.no-favorites').addClass('d-none');
+            timeslots.removeClass('has-favorites');
+            sessionsWrap.removeClass('is-thinking');
+            sessionsWrap.removeClass('favorites-only');
+            resultsCount.html( $('.js-session:visible').length + ' results');
+
+        }, 800);
+
+      } else {
+        favsToggle.addClass('is-active');
+        sessionsWrap.addClass('is-thinking');
+        timeslots.each(function(){
+          if( $(this).find('.js-session.is-favorite').length != 0 ) {
+            $(this).addClass('has-favorites');
+          }
+        });
+        setTimeout(function(){
+          sessionsWrap.removeClass('is-thinking');
+          sessionsWrap.addClass('favorites-only');
+
+
+          let sessionMatches = $('.js-session:visible').length;
+          resultsCount.html( sessionMatches + ' results');
+          if( sessionMatches == 0 ) {
+            $('.no-favorites').removeClass('d-none');
+          } else {
+            $('.no-favorites').addClass('d-none');
+          }
+          $('.no-results').addClass('d-none');
+        }, 800);
+      }
+    });
+
+    $(document).ready(function(){
+      getFavs();
+      // Check for query sting params
+      getParams();
+      //getRecommendations();
+    });
+
+    function getParams() {
+      let urlParams = new URLSearchParams(window.location.search);
+      let filters = urlParams.get('favorites');
+
+      if( filters ) {
+        //console.log(filters);
+        // filterArray = filters.split(",");
+        // console.log(filterArray);
+        $('.js-favorites-toggle').click();
+      }
+
+      // var favs = urlParams.get('favorites');
+      // if(favs){
+      //   favsArray = favs.split(",");
+      //   // console.log(favs);
+      //   // console.log(favsArray);
+      //   session.each(function(){
+      //     var el = $(this),
+      //     elId = el.attr('id');
+      //     if( favsArray.includes(elId) ) {
+      //       el.addClass('is-favorite');
+      //     }
+      //   });
+      // }
+    }
+
+  }
+};
+
+
+// ---------------------------------------------------------------------
+// Filter
+// ---------------------------------------------------------------------
+
+APP.Filters = {
+
+  init: function() {
+
+    if( !document.getElementById('filters') ) {
+      return;
+    }
+
+    function removeItemOnce(arr, value) {
+        var index = arr.indexOf(value);
+        if (index > -1) {
+            arr.splice(index, 1);
+        }
+        return arr;
+    }
+
+    function findOne(arr2, arr) {
+      return arr.some(function (v) {
+        return arr2.indexOf(v) >= 0;
+      });
+    }
+
+    function matchAll(superset, subset) {
+      return subset.every(function (value) {
+        return (superset.indexOf(value) >= 0);
+      });
+    }
+
+    const filters = $('.category label');
+    let activeFilters = [];
+    let activeChannels = [];
+
+    filters.click(function(){
+      let el = $(this);
+      let filter = el.prev('input').val();
+      //console.log(filter);
+      if( filter == 'developer' || filter == 'enterprise' ){
+
+        if( activeChannels.includes(filter) ) {
+          removeItemOnce(activeChannels, filter);
+        } else {
+          activeChannels.push(filter);
+        }
+
+      } else {
+
+        if( activeFilters.includes(filter) ) {
+          removeItemOnce(activeFilters, filter);
+        } else {
+          activeFilters.push(filter);
+        }
+
+      }
+      updateSchedule();
+      //console.log(activeFilters);
+    });
+
+    const sessionsWrap = $('.sessions');
+    const session = $('.js-session');
+    const resultsCount = $('#filter-results-count');
+    const timeslots = $('.timeslot');
+
+    function updateSchedule() {
+      let count = 0;
+      sessionsWrap.addClass('is-thinking');
+
+      setTimeout(function(){
+        sessionsWrap.removeClass('is-thinking');
+
+        if( activeChannels.length ) {
+          sessionsWrap.addClass('is-filtered-channel');
+        } else {
+          sessionsWrap.removeClass('is-filtered-channel');
+        }
+        if( activeFilters.length ) {
+          sessionsWrap.addClass('is-filtered');
+        } else {
+          sessionsWrap.removeClass('is-filtered');
+        }
+
+        session.each(function(){
+          let sesh = $(this);
+          let tags = sesh.attr('data-tags');
+          let seshChannel = sesh.attr('data-channel');
+          tags = tags.split(", ");
+          let tagCheck = false;
+
+          if( activeChannels.length ) {
+            if( activeChannels.includes(seshChannel) ) {
+              sesh.addClass('has-active-channel');
+              count++;
+              tagCheck = true;
+            } else {
+              sesh.removeClass('has-active-channel');
+            }
+          } else {
+            tagCheck = true;
+          }
+
+          if( tagCheck && activeFilters.length) {
+            if( findOne(activeFilters, tags) ) {
+              sesh.addClass('has-active-filter');
+              count++;
+            } else {
+              sesh.removeClass('has-active-filter');
+            }
+          }
+        });
+
+        if( count == 0 ) {
+          sessionsWrap.removeClass('is-filtered');
+          timeslots.removeClass('has-active-session');
+          session.removeClass('has-active-filter');
+        } else {
+          timeslots.each(function(){
+
+            // if active channel filters
+            if( activeChannels.length ) {
+              if( $(this).find('.js-session.has-active-channel').length != 0 ) {
+                $(this).addClass('has-active-session');
+              } else {
+                $(this).removeClass('has-active-session');
+              }
+            }
+
+            if( activeFilters.length ) {
+              if( $(this).find('.js-session.has-active-filter').length != 0 ) {
+                $(this).addClass('has-active-session');
+              } else {
+                $(this).removeClass('has-active-session');
+              }
+            }
+          });
+        }
+
+        let sessionMatches = $('.js-session:visible').length;
+        resultsCount.html( sessionMatches + ' results');
+        if( sessionMatches == 0 ) {
+          $('.no-results').removeClass('d-none');
+        } else {
+          $('.no-results').addClass('d-none');
+        }
+        $('.no-favorites').addClass('d-none');
+
+      }, 800);
+    }
+
+    function getParams() {
+      let urlParams = new URLSearchParams(window.location.search);
+      urlParams = urlParams.get('filters');
+      if( urlParams ) {
+        activeFilters = urlParams.split(",");
+        filters.each(function(){
+          let el = $(this);
+          let filter = el.prev('input').val();
+          if( activeFilters.includes(filter) ) {
+            el.prev('input').prop( "checked", true );
+          }
+        });
+        updateSchedule();
+      }
+    }
+
+
+    $('.filter-group:not(.is-active)').find('.category-wrap').hide();
+
+    $('.category__hd').click(function(){
+      let el = $(this);
+      let pars = el.parents('.filter-group');
+      let target = pars.find('.category-wrap');
+
+      if( pars.hasClass('is-active') ) {
+        pars.removeClass('is-active');
+        target.slideUp('400');
+      } else {
+        pars.addClass('is-active');
+        target.slideDown('400');
+      }
+
+    });
+
+
+    $('.js-clear-filters').click(function(){
+      activeFilters = [];
+      $('.category input:checkbox:checked').each(function(){
+        $(this).prop( "checked", false );
+      });
+
+      updateSchedule();
+    });
+
+    // Check for query params
+    $(document).ready(function(){
+      resultsCount.html( $('.js-session:visible').length + ' results');
+      getParams();
+    });
+
+
+    function copyShareUrl() {
+      let copyText = document.getElementById("share-link");
+      copyText.select();
+      copyText.setSelectionRange(0, 99999);
+      document.execCommand("copy");
+    }
+
+    $('.js-share-link').click(function(e){
+      e.preventDefault();
+      let newUrl = location.protocol + '//' + location.host + location.pathname + '?filters='+activeFilters;
+      $('#share-link').attr('value', newUrl).removeClass('d-none');
+      copyShareUrl();
+      $('#share-note').slideDown(400);
+      setTimeout(function(){
+        $('#share-note').slideUp(400);
+      }, 2000);
+    });
+
+
+  }
+};
+
+
+
+}(jQuery, andrewrossco));
